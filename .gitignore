@@ -59,6 +59,7 @@ yarn-error.log*
 *.tgz
 
 # ci
+.github/workflows/
 .vercel/
 .netlify/
 
