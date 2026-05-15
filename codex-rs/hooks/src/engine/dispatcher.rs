@@ -60,6 +60,7 @@ pub(crate) fn select_handlers_for_matcher_inputs(
                 }
             }
             HookEventName::UserPromptSubmit | HookEventName::Stop => true,
+            HookEventName::SessionEnd => true,
         })
         .cloned()
         .collect()
@@ -139,7 +140,7 @@ pub(crate) fn completed_summary(
 
 fn scope_for_event(event_name: HookEventName) -> HookScope {
     match event_name {
-        HookEventName::SessionStart => HookScope::Thread,
+        HookEventName::SessionStart | HookEventName::SessionEnd => HookScope::Thread,
         HookEventName::PreToolUse
         | HookEventName::PermissionRequest
         | HookEventName::PostToolUse

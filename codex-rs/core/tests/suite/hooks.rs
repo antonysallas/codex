@@ -705,6 +705,40 @@ print(json.dumps({{
     Ok(())
 }
 
+fn write_session_end_hook_recording_input(home: &Path, exit_code: i32) -> Result<()> {
+    let script_path = home.join("session_end_hook.py");
+    let log_path = home.join("session_end_hook_log.jsonl");
+    let script = format!(
+        r#"import json
+from pathlib import Path
+import sys
+
+payload = json.load(sys.stdin)
+with Path(r"{log_path}").open("a", encoding="utf-8") as handle:
+    handle.write(json.dumps(payload) + "\n")
+
+sys.exit({exit_code})
+"#,
+        log_path = log_path.display(),
+        exit_code = exit_code,
+    );
+    let hooks = serde_json::json!({
+        "hooks": {
+            "SessionEnd": [{
+                "hooks": [{
+                    "type": "command",
+                    "command": format!("python3 {}", script_path.display()),
+                    "statusMessage": "running session end hook",
+                }]
+            }]
+        }
+    });
+
+    fs::write(&script_path, script).context("write session end hook script")?;
+    fs::write(home.join("hooks.json"), hooks.to_string()).context("write hooks.json")?;
+    Ok(())
+}
+
 fn rollout_hook_prompt_texts(text: &str) -> Result<Vec<String>> {
     let mut texts = Vec::new();
     for line in text.lines() {
@@ -826,6 +860,10 @@ fn read_session_start_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>>
         .filter(|line| !line.trim().is_empty())
         .map(|line| serde_json::from_str(line).context("parse session start hook log line"))
         .collect()
+}
+
+fn read_session_end_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+    read_hook_inputs_from_log(home.join("session_end_hook_log.jsonl").as_path())
 }
 
 fn read_user_prompt_submit_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
@@ -1060,6 +1098,102 @@ async fn session_start_hook_spills_large_additional_context() -> Result<()> {
     assert!(developer_message.contains("tokens truncated"));
     let path = spilled_hook_output_path(developer_message).context("spill path")?;
     assert_eq!(fs::read_to_string(path)?, additional_context);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn session_end_hook_runs_on_shutdown() -> Result<()> {
+    let server = start_mock_server().await;
+
+    let mut builder = test_codex()
+        .with_pre_build_hook(|home| {
+            if let Err(error) = write_session_end_hook_recording_input(home, /*exit_code*/ 0) {
+                panic!("failed to write session end hook test fixture: {error}");
+            }
+        })
+        .with_config(trust_discovered_hooks);
+    let test = builder.build(&server).await?;
+
+    test.codex.submit(Op::Shutdown {}).await?;
+    let hook_event = wait_for_event(&test.codex, |event| {
+        matches!(
+            event,
+            EventMsg::HookCompleted(completed)
+                if completed.run.event_name == codex_protocol::protocol::HookEventName::SessionEnd
+        )
+    })
+    .await;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ShutdownComplete)
+    })
+    .await;
+
+    let EventMsg::HookCompleted(completed) = hook_event else {
+        unreachable!("waited for hook completed event");
+    };
+    assert_eq!(completed.turn_id, None);
+    assert_eq!(
+        completed.run.status,
+        codex_protocol::protocol::HookRunStatus::Completed
+    );
+
+    let hook_inputs = read_session_end_hook_inputs(test.codex_home_path())?;
+    assert_eq!(hook_inputs.len(), 1);
+    assert_eq!(
+        hook_inputs[0]
+            .get("hook_event_name")
+            .and_then(Value::as_str),
+        Some("SessionEnd")
+    );
+    assert_eq!(
+        hook_inputs[0]
+            .get("transcript_path")
+            .and_then(Value::as_str)
+            .map(str::is_empty),
+        Some(false)
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn session_end_hook_failure_does_not_block_shutdown() -> Result<()> {
+    let server = start_mock_server().await;
+
+    let mut builder = test_codex()
+        .with_pre_build_hook(|home| {
+            if let Err(error) = write_session_end_hook_recording_input(home, /*exit_code*/ 1) {
+                panic!("failed to write failing session end hook test fixture: {error}");
+            }
+        })
+        .with_config(trust_discovered_hooks);
+    let test = builder.build(&server).await?;
+
+    test.codex.submit(Op::Shutdown {}).await?;
+    let hook_event = wait_for_event(&test.codex, |event| {
+        matches!(
+            event,
+            EventMsg::HookCompleted(completed)
+                if completed.run.event_name == codex_protocol::protocol::HookEventName::SessionEnd
+        )
+    })
+    .await;
+    wait_for_event(&test.codex, |event| {
+        matches!(event, EventMsg::ShutdownComplete)
+    })
+    .await;
+
+    let EventMsg::HookCompleted(completed) = hook_event else {
+        unreachable!("waited for hook completed event");
+    };
+    assert_eq!(
+        completed.run.status,
+        codex_protocol::protocol::HookRunStatus::Failed
+    );
+
+    let hook_inputs = read_session_end_hook_inputs(test.codex_home_path())?;
+    assert_eq!(hook_inputs.len(), 1);
 
     Ok(())
 }

@@ -249,6 +249,12 @@
           },
           "type": "array"
         },
+        "SessionEnd": {
+          "items": {
+            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
+          },
+          "type": "array"
+        },
         "SessionStart": {
           "items": {
             "$ref": "#/definitions/ConfiguredHookMatcherGroup"
@@ -286,6 +292,7 @@
         "PostToolUse",
         "PreCompact",
         "PreToolUse",
+        "SessionEnd",
         "SessionStart",
         "Stop",
         "UserPromptSubmit"

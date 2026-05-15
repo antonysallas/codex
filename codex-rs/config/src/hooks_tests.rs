@@ -87,6 +87,37 @@ statusMessage = "checking"
 }
 
 #[test]
+fn hook_events_deserialize_session_end() {
+    let parsed: HookEventsToml = toml::from_str(
+        r#"
+[[SessionEnd]]
+
+[[SessionEnd.hooks]]
+type = "command"
+command = "python3 /tmp/session_end.py"
+"#,
+    )
+    .expect("session end hook events TOML should deserialize");
+
+    assert_eq!(
+        parsed,
+        HookEventsToml {
+            session_end: vec![MatcherGroup {
+                matcher: None,
+                hooks: vec![HookHandlerConfig::Command {
+                    command: "python3 /tmp/session_end.py".to_string(),
+                    command_windows: None,
+                    timeout_sec: None,
+                    r#async: false,
+                    status_message: None,
+                }],
+            }],
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
 fn hooks_toml_deserializes_inline_events_and_state_map() {
     let parsed: HooksToml = toml::from_str(
         r#"

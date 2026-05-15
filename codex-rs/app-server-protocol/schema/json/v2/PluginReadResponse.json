@@ -45,6 +45,7 @@
         "preCompact",
         "postCompact",
         "sessionStart",
+        "sessionEnd",
         "userPromptSubmit",
         "stop"
       ],

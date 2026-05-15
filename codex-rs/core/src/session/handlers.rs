@@ -48,6 +48,7 @@ use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 
 use crate::context_manager::is_user_turn_boundary;
+use crate::hook_runtime::run_session_end_hooks;
 use codex_protocol::config_types::CollaborationMode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::Settings;
@@ -623,8 +624,13 @@ pub async fn set_thread_memory_mode(sess: &Arc<Session>, sub_id: String, mode: T
     }
 }
 
-async fn shutdown_session_runtime(sess: &Arc<Session>) {
+async fn shutdown_session_runtime(sess: &Arc<Session>, sub_id: Option<String>) {
     sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+    let turn_context = match sub_id {
+        Some(sub_id) => sess.new_default_turn_with_sub_id(sub_id).await,
+        None => sess.new_default_turn().await,
+    };
+    run_session_end_hooks(sess, &turn_context).await;
     let _ = sess.conversation.shutdown().await;
     sess.services
         .unified_exec_manager
@@ -648,7 +654,7 @@ fn emit_thread_stop_lifecycle(sess: &Session) {
 }
 
 pub async fn shutdown(sess: &Arc<Session>, sub_id: String) -> bool {
-    shutdown_session_runtime(sess).await;
+    shutdown_session_runtime(sess, Some(sub_id.clone())).await;
     info!("Shutting down Codex instance");
     let history = sess.clone_history().await;
     let turn_count = history
@@ -916,7 +922,7 @@ pub(super) async fn submission_loop(
     // If the submission loop exits because the channel closed without an
     // explicit shutdown op, still run session teardown.
     if !shutdown_received {
-        shutdown_session_runtime(&sess).await;
+        shutdown_session_runtime(&sess, /*sub_id*/ None).await;
         emit_thread_stop_lifecycle(sess.as_ref());
     }
     debug!("Agent loop exited");

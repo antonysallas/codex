@@ -12,6 +12,8 @@ use codex_hooks::PostToolUseOutcome;
 use codex_hooks::PostToolUseRequest;
 use codex_hooks::PreToolUseOutcome;
 use codex_hooks::PreToolUseRequest;
+use codex_hooks::SessionEndOutcome;
+use codex_hooks::SessionEndRequest;
 use codex_hooks::SessionStartOutcome;
 use codex_hooks::UserPromptSubmitOutcome;
 use codex_hooks::UserPromptSubmitRequest;
@@ -134,6 +136,23 @@ pub(crate) async fn run_pending_session_start_hooks(
     .await
     .record_additional_contexts(sess, turn_context)
     .await
+}
+
+pub(crate) async fn run_session_end_hooks(sess: &Arc<Session>, turn_context: &Arc<TurnContext>) {
+    let request = SessionEndRequest {
+        session_id: sess.session_id().into(),
+        #[allow(deprecated)]
+        cwd: turn_context.cwd.clone(),
+        transcript_path: sess.hook_transcript_path().await,
+        model: turn_context.model_info.slug.clone(),
+        permission_mode: hook_permission_mode(turn_context),
+    };
+    let hooks = sess.hooks();
+    let preview_runs = hooks.preview_session_end(&request);
+    emit_hook_started_events(sess, turn_context, preview_runs).await;
+
+    let SessionEndOutcome { hook_events } = hooks.run_session_end(request).await;
+    emit_hook_completed_events(sess, turn_context, hook_events).await;
 }
 
 /// Runs matching `PreToolUse` hooks before a tool executes.
@@ -554,6 +573,7 @@ fn hook_run_metric_tags(run: &HookRunSummary) -> [(&'static str, &'static str); 
         HookEventName::PreCompact => "PreCompact",
         HookEventName::PostCompact => "PostCompact",
         HookEventName::SessionStart => "SessionStart",
+        HookEventName::SessionEnd => "SessionEnd",
         HookEventName::UserPromptSubmit => "UserPromptSubmit",
         HookEventName::Stop => "Stop",
     };

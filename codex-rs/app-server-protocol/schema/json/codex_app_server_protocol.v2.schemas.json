@@ -6063,6 +6063,7 @@
         "preCompact",
         "postCompact",
         "sessionStart",
+        "sessionEnd",
         "userPromptSubmit",
         "stop"
       ],
@@ -6993,6 +6994,12 @@
           },
           "type": "array"
         },
+        "SessionEnd": {
+          "items": {
+            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
+          },
+          "type": "array"
+        },
         "SessionStart": {
           "items": {
             "$ref": "#/definitions/ConfiguredHookMatcherGroup"
@@ -7030,6 +7037,7 @@
         "PostToolUse",
         "PreCompact",
         "PreToolUse",
+        "SessionEnd",
         "SessionStart",
         "Stop",
         "UserPromptSubmit"

@@ -16,6 +16,7 @@
         "PreCompact",
         "PostCompact",
         "SessionStart",
+        "SessionEnd",
         "UserPromptSubmit",
         "Stop"
       ],

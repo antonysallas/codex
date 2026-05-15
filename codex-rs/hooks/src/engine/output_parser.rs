@@ -13,6 +13,11 @@ pub(crate) struct SessionStartOutput {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct SessionEndOutput {
+    pub universal: UniversalOutput,
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct PreToolUseOutput {
     pub universal: UniversalOutput,
     pub block_reason: Option<String>,
@@ -84,6 +89,7 @@ use crate::schema::PreCompactCommandOutputWire;
 use crate::schema::PreToolUseCommandOutputWire;
 use crate::schema::PreToolUseDecisionWire;
 use crate::schema::PreToolUsePermissionDecisionWire;
+use crate::schema::SessionEndCommandOutputWire;
 use crate::schema::SessionStartCommandOutputWire;
 use crate::schema::StopCommandOutputWire;
 use crate::schema::UserPromptSubmitCommandOutputWire;
@@ -96,6 +102,13 @@ pub(crate) fn parse_session_start(stdout: &str) -> Option<SessionStartOutput> {
     Some(SessionStartOutput {
         universal: UniversalOutput::from(wire.universal),
         additional_context,
+    })
+}
+
+pub(crate) fn parse_session_end(stdout: &str) -> Option<SessionEndOutput> {
+    let wire: SessionEndCommandOutputWire = parse_json(stdout)?;
+    Some(SessionEndOutput {
+        universal: UniversalOutput::from(wire.universal),
     })
 }
 
